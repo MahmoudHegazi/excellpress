@@ -10,6 +10,9 @@ vagrant
 
 vbox
 5.2.38
+```python
+app.config['JSON_AS_ASCII'] = False
+```
 
 https://stackoverflow.com/questions/60239099/csv-file-with-arabic-characters-is-displayed-as-symbols-in-excel
 UnicodeDecodeError: 'ascii' codec can't decode byte 0xd8 in position 0: ordinal not in range(128)
