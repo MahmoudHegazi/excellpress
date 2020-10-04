@@ -7,6 +7,9 @@ becuase it's very fast, you will see your huge excelsheet in short time shorter 
 send mobile message python (easy steps)
 https://2wenosco.odoo.com/web#action=163&model=mailing.mailing&view_type=kanban&cids=1&menu_id=120
 
+#ajax recap
+https://www.codementor.io/@sheena/build-ajax-helloworld-pyramid-du107vhtl
+
 vagrant
 2.2.7
 
