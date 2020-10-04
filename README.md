@@ -4,6 +4,8 @@ Upload any Excel Sheet, Using ML the app can upload the excel sheet and recogniz
 #why this app
 becuase it's very fast, you will see your huge excelsheet in short time shorter  google search result ..!!! clone it and check by yourself
 
+send mobile message python (easy steps)
+https://2wenosco.odoo.com/web#action=163&model=mailing.mailing&view_type=kanban&cids=1&menu_id=120
 
 vagrant
 2.2.7
