@@ -7,14 +7,12 @@ from werkzeug.utils import secure_filename
 from flask import send_from_directory
 from sqlalchemy import create_engine, asc
 from sqlalchemy.orm import sessionmaker
-from xdb import Base, User, Sheet, History 
+from sqlalchemy.types import TypeDecorator, Unicode
+from xdb import Base, User, Sheet, History, Suppliers, Item
 from flask import session as login_session
 import random
 import string
 import excel
-# IMPORTS FOR THIS STEP
-from oauth2client.client import flow_from_clientsecrets
-from oauth2client.client import FlowExchangeError
 import httplib2
 import json
 from flask import make_response
@@ -33,6 +31,7 @@ import pyarabic.number as number
 import arabic_reshaper
 from bidi.algorithm import get_display
 import sys
+from sqlalchemy import func
 
 reload(sys)  
 sys.setdefaultencoding('utf-8')
@@ -50,14 +49,24 @@ ALLOWED_EXTENSIONS = set(['xls', 'xlsb', 'xlsm', 'xlsx', 'xlt', 'xltx', 'xlw', '
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+
+
+
+class CoerceUTF8(TypeDecorator):
+    """Safely coerce Python bytestrings to Unicode
+    before passing off to the database."""
+
+    impl = Unicode
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, str):
+            value = value.decode('utf-8')
+        return value
+
+
 @app.route('/sheet/JSON')
 def sheetJSON():
     sheet = session.query(Sheet).all()
-    #sheets = arabic_reshaper.reshape(sheet)
-    #for x in sheet:
-        #x = arabic_reshaper.reshape(x)
-        #x = arabic_reshaper.reshape(x)
-    #bidi_text = get_display(reshaped_text)
     return jsonify(Request=[r.serialize for r in sheet])
 
 
@@ -65,11 +74,109 @@ def sheetJSON():
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-@app.route('/upload', methods=['GET', 'POST'])
+
+
 @app.route('/home', methods=['GET', 'POST'])
 @app.route('/', methods=['GET', 'POST'])
+def home():
+    sheets = session.query(Sheet).all()
+    sheet_count = int(len(sheets))
+    numbers = 1
+    if sheet_count == 0:
+        sheet_count = u"لا توجد طلبات"
+        numbers = 0
+    return render_template('index.html', sheets_number=sheet_count, numbers=numbers)
+
+@app.route('/upload', methods=['GET', 'POST'])
 def upload_file():
     if request.method == 'POST':
+        if 'form2' in request.form:
+            #if request.form['request_date'] != '':
+                #man_request_date = request.form['request_date']
+            #else:
+                #man_request_date = "-"              
+
+            if request.form['item_name'] != '':
+                man_item_name = request.form['item_name']
+            else:
+                man_item_name = "-"    
+
+            if request.form['description'] != '':
+                man_description = request.form['description']
+            else:
+                man_description = "-"    
+
+            if request.form['project'] != '':
+                man_project = request.form['project']
+            else:
+                man_project = "-"    
+
+            if request.form['manufacturing_order'] != '':
+                man_manufacturing_order = request.form['manufacturing_order']
+            else:
+                man_manufacturing_order = "-"    
+
+            if request.form['order_number'] != '':
+                man_order_number = request.form['order_number']
+            else:
+                man_order_number = "-"    
+
+            if request.form['pr'] != '':
+                man_pr = request.form['pr']
+            else:
+                man_pr = "-"    
+
+            if request.form['unit'] != '':
+                man_unit = request.form['unit']
+            else:
+                man_unit = "-"    
+
+            if request.form['quantity_to_buy'] != '':
+                man_quantity_to_buy = request.form['quantity_to_buy']
+            else:
+                man_quantity_to_buy = "-"    
+
+            if request.form['accepted'] != '':
+                man_accepted = request.form['accepted']
+            else:
+                man_accepted = "-"    
+
+            if request.form['remaining'] != '':
+                man_remaining = request.form['remaining']
+            else:
+                man_remaining = "-"    
+
+            if request.form['delivery_date'] != '':
+                man_delivery_date = request.form['delivery_date']
+            else:
+                man_delivery_date = "-"    
+
+            if request.form['supplier'] != '':
+                man_supplier = request.form['supplier']
+            else:
+                man_supplier = "-"    
+
+            if request.form['delivery_order_number'] != '':
+                man_delivery_order_number = request.form['delivery_order_number']
+            else:
+                man_delivery_order_number = "-"    
+
+            if request.form['notes'] != '':
+                man_notes = request.form['notes']
+            else:
+                man_notes = "-"
+
+            new_row = Sheet(request_date=request.form['request_date'], item_name=man_item_name,
+                            description=man_description,project=man_project, manufacturing_order=man_manufacturing_order,
+                            order_number=man_order_number,pr=man_pr, unit=man_unit,
+                            quantity_to_buy=man_quantity_to_buy,accepted=man_accepted,
+                            remaining=man_remaining, delivery_date=man_delivery_date,supplier=man_supplier,
+                            delivery_order_number=man_delivery_order_number, notes=man_notes)
+            session.add(new_row)
+            session.commit()
+            
+
+
 	
         
         # check if the post request has the file part
@@ -87,80 +194,206 @@ def upload_file():
             file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
 
             file_path = UPLOAD_FOLDER + "/" + filename
-            nx = pd.read_excel(file_path)
+            nx = pd.read_excel(file_path, charset='utf-8')
             lf = pd.DataFrame(nx)
 
             table_names = []
 			# this to use arbaic and arabic libr 
-            text = u'الاسم'
-            age = u'السن'
-            gender = u'الجنس'
-            phone = u'التليفون'            
-            quiant = u'الوحدة'
+            ar_request_date = u'تاريخ الطلب'
+            ar_item_name = u'اسم الصنف'
+            ar_description = u'المواصفات'
+            ar_project = u'اسم العميل/المشروع'            
+            ar_manufacturing_order = u'امر التصنيع'
+            ar_order_number = u'رقم طلب المشتريات'
+            ar_pr = u'pr'
+            ar_unit = u'الوحدة'
+            ar_quantity_to_buy = u'الكمية المطلوب شرائها'
+            ar_accepted = u'الكمية المقبولة'
+            ar_remaining = u'الكمية المتبقية'
+            ar_delivery_date = u'تاريخ التسليم الفعلي'
+            ar_supplier = u'اسم المورد'
+            ar_delivery_order_number = u'رقم اذن التسليم'
+            ar_notes = u'ملحظات'            
+            # store all headers (columns) in one list 
+            sheet_headers = [ar_request_date, ar_item_name, ar_description,
+                             ar_project, ar_manufacturing_order, ar_order_number,
+                             ar_pr, ar_unit, ar_quantity_to_buy, ar_accepted,
+                             ar_remaining, ar_delivery_date, ar_supplier,
+                             ar_delivery_order_number, ar_notes]
+            #ar_request_date
+            ar_item_name.encode('utf8')
+            ar_description.encode('utf8')
+            ar_project.encode('utf8')
+            ar_manufacturing_order.encode('utf8')
+            ar_order_number.encode('utf8')
+            ar_pr.encode('utf8')
+            ar_unit.encode('utf8')
+            ar_quantity_to_buy.encode('utf8')
+            ar_accepted.encode('utf8')
+            ar_remaining.encode('utf8')
+            ar_delivery_date.encode('utf8')
+            ar_supplier.encode('utf8')
+            ar_delivery_order_number.encode('utf8')
+            ar_notes.encode('utf8')
             
-            text.encode('utf8')
-            age.encode('utf8')
-            gender.encode('utf8')
-            phone.encode('utf8')
-            quiant.encode('utf8')
-            df = pd.DataFrame(nx, columns= [text, age, gender, phone, quiant])
-            #writer = pd.ExcelWriter(nx, engine='xlsxwriter')
-            #df.to_excel(writer, sheet_name='Sheet1', encoding="utf-8-sig")
-            #writer.save()		
-			
-            names = []
-            prs = []
-            dates = []
-            suppliers = []
-            quants = []
-            #unies.encode('utf8').decode('utf8')
-            #reshaped_text = arabic_reshaper.reshape(unies)
-            #bidi_text = get_display(reshaped_text)
-            #bidi_text.encode('utf8')
-            for xname in df[text]:
-                #myname = xname.encode('utf8')
-                #reshaped_text = arabic_reshaper.reshape(xname)
-                #bidi_text = get_display(reshaped_text)
-                #bidi_text.encode('utf8')
-                #tx = u'اعلا'
-                #xname.decode('utf-8')
-                #xname.encode('utf8')
-                #unicode_somedir = xname.decode('utf8')
-                names.append(xname)
-                print(xname)
-            for xpnumber in df[age]:
-                prs.append(xpnumber)
-            for xdate in df[gender]: 
-                dates.append(xdate)
-            for xsupplier in df[phone]:
-                suppliers.append(xsupplier)
-            for xquant in df[quiant]:
-                quants.append(xquant)
+            df = pd.DataFrame(nx, columns= sheet_headers)
 
-            for row in range(len(names)):
-                ju_name = names[row]
-                ju_pnumber = prs[row]
-                ju_date = dates[row]
-                ju_supplier = suppliers[row]
-                ju_quait = quants[row]
-                new_row = Sheet(name=ju_name, pr=ju_pnumber, date=ju_date, supplier=ju_supplier, quait=ju_quait)
+            request_dates = []
+            item_names = []
+            descriptions = []
+            projects = []
+            manufacturing_orders = []
+            order_numbers = []
+            prs = []
+            units = []
+            quantitys_to_buys = []
+            accepteds = []
+            remainings = []
+            delivery_dates = []
+            suppliers = []
+            delivery_orders_numbers = []
+            notess = []
+
+            #bidi_text.encode('utf8')
+            for r_date in df[ar_request_date]:
+                request_dates.append(str(r_date))
+                print(r_date)
+                
+            for r_name in df[ar_item_name]:
+                item_names.append(r_name)
+                
+            for r_description in df[ar_description]: 
+                descriptions.append(r_description)
+                
+            for r_projet in df[ar_project]:
+                projects.append(r_projet)
+                
+            for r_manufacturing in df[ar_manufacturing_order]:
+                manufacturing_orders.append(r_manufacturing)
+                
+            for r_ordernumber in df[ar_order_number]:
+                order_numbers.append(r_ordernumber)
+                
+            for r_pr in df[ar_pr]:
+                prs.append(r_pr)
+                
+            for r_unit in df[ar_unit]:
+                units.append(r_unit)
+                
+            for r_bquantity in df[ar_quantity_to_buy]:
+                quantitys_to_buys.append(r_bquantity)
+                
+            for r_accepted in df[ar_accepted]:
+                accepteds.append(r_accepted)
+                
+            for r_remaining in df[ar_remaining]:
+                remainings.append(r_remaining)
+                
+            for r_delivery_date in df[ar_delivery_date]:
+                delivery_dates.append(r_delivery_date)
+                
+            for r_supplier in df[ar_supplier]:
+                suppliers.append(r_supplier)
+                
+            for r_deliver_orders in df[ar_delivery_order_number]:
+                delivery_orders_numbers.append(r_deliver_orders)
+                
+            for r_notes in df[ar_notes]:
+                notess.append(r_notes)                
+            print(len(item_names))
+            for row in range(len(item_names)):
+                ju_request_dates = request_dates[row]
+                ju_item_names = item_names[row]
+                ju_descriptions = descriptions[row]
+                ju_projects = projects[row]
+                ju_manufacturing_orders = manufacturing_orders[row]
+                ju_order_numbers = order_numbers[row]
+                ju_prs = prs[row]
+                ju_units = units[row]
+                ju_quantitys_to_buys = quantitys_to_buys[row]
+                ju_accepteds = accepteds[row]
+                ju_remainings = remainings[row]
+                ju_delivery_dates = delivery_dates[row]
+                ju_suppliers = suppliers[row]
+                ju_delivery_orders_numbers = delivery_orders_numbers[row]
+                ju_notess = notess[row]
+                new_row = Sheet(request_date=ju_request_dates, item_name=ju_item_names, description=ju_descriptions,
+                                project=ju_projects, manufacturing_order=ju_manufacturing_orders, order_number=ju_order_numbers,
+                                pr=ju_prs, unit=ju_units, quantity_to_buy=ju_quantitys_to_buys,
+                                accepted=ju_accepteds, remaining=ju_remainings, delivery_date=ju_delivery_dates,
+                                supplier=ju_suppliers, delivery_order_number=ju_delivery_orders_numbers, notes=ju_notess)
                 session.add(new_row)
             session.commit()
+            flash('Successfully Added Request : %s ' % new_row.pr)
+            sheets = session.query(Sheet).order_by(asc(Sheet.id)).all()
             
-            print("GoodJob Robot %s" % new_row.name)
+            return redirect(url_for('i_request_Function', sheets=sheets))
+            
+            print("GoodJob Robot %s" % new_row.request_date)
+
+    
+        
+    return render_template('pages/forms/i_general.html')
+    #sheets_number = len(session.query(Sheet).order_by(asc(Sheet.id)).all())
+    #return render_template('pages/forms/i_general.html', sheets=sheets, sheets_number=sheets_number)
 
 
-    return render_template('index.html')
 
 
-@app.route('/i_request' , methods = ['GET'])
+
+
+@app.route('/i_request')
 def i_request_Function():
-    return render_template('/pages/tables/i_request.html')
+    sheets = session.query(Sheet).order_by(asc(Sheet.id)).all()
+    return render_template('/pages/tables/internal_request.html', sheets=sheets)
+
+@app.route('/is_request')
+def is_request_Function():
+    suppliers = session.query(Suppliers).order_by(asc(Suppliers.id)).all()
+    sheets = session.query(Sheet).all()
+    sheets_number = len(sheets)
+    return render_template('/pages/tables/internal_supplier_request.html', suppliers=suppliers, sheets_number=sheets_number)
+
 
 @app.route('/i_general', methods = ['GET'])
 def ilovepython():
-    return render_template('/pages/forms/i_general.html')
+    return render_template('/pages/forms/internal_form.html')
  
+
+@app.route('/is_general', methods = ['GET'])
+def i_s_general():
+    return render_template('/pages/forms/internal_supplier_form.html')
+ 
+
+
+
+
+
+@app.route('/e_request')
+def e_request_Function():
+    sheets = session.query(Sheet).order_by(asc(Sheet.id)).all()
+    return render_template('/pages/tables/external_request.html', sheets=sheets)
+
+@app.route('/es_request')
+def es_request_Function():
+    suppliers = session.query(Suppliers).order_by(asc(Suppliers.id)).all()
+    sheets = session.query(Sheet).all()
+    sheets_number = len(sheets)
+    return render_template('/pages/tables/external_supplier_request.html', suppliers=suppliers, sheets_number=sheets_number)
+
+
+@app.route('/e_general', methods = ['GET'])
+def e_general():
+    return render_template('/pages/forms/external_form.html')
+ 
+
+@app.route('/es_general', methods = ['GET'])
+def e_s_general():
+    return render_template('/pages/forms/external_supplier_form.html')
+ 
+
+
+
     
 @app.route('/home/<int:sheet_id>' , methods=['GET', 'POST'])
 def getSheet(sheet_id):
@@ -192,3 +425,5 @@ if __name__ == '__main__':
     app.secret_key = 'super_secret_key'
     app.debug = True
     app.run(host='0.0.0.0', port=8080, threaded=False)
+
+
