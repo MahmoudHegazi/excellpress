@@ -10,6 +10,9 @@ https://2wenosco.odoo.com/web#action=163&model=mailing.mailing&view_type=kanban&
 #ajax recap Important
 https://www.codementor.io/@sheena/build-ajax-helloworld-pyramid-du107vhtl
 
+# excel libarary python
+https://openpyxl.readthedocs.io/en/stable/
+
 vagrant
 2.2.7
 
